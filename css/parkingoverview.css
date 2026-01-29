@@ -1,0 +1,39 @@
+
+	.shipment-wrapper {
+		display: flex;
+		align-items: flex-start;
+		justify-content: space-between;
+	}
+
+	.shipment-table {
+		width: 70%;
+	}
+
+	.shipment-status {
+		width: 28%;
+		padding-left: 10px;
+	}
+
+	.shipment-block {
+		margin-bottom: 1rem;
+	}
+
+	.shipment-block span {
+		display: inline-block;
+		margin-right: 5px;
+	}
+
+	.btn-send {
+		background-color: #00c0e9;
+		color: white;
+		border: none;
+		padding: 5px 10px;
+		border-radius: 5px;
+	}
+	
+.rotate-icon {
+    transition: transform 0.3s ease;
+}
+.rotate-icon.rotate {
+    transform: rotate(180deg);
+}

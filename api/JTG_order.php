@@ -1,0 +1,289 @@
+<?php
+    /*************************************************/
+    /*                                               */
+    /*       主掃(預下單)                         	  */
+    /*		店家收款設備顯示QR Code，				   */
+	/*		客戶使用電子錢包對店家所展示的 				*/
+	/*		QR Code掃描後進行支付		       		  */
+    /*                                               */
+    /*************************************************/
+    include_once "./../common/entry.php";
+	header('Content-Type: application/json');
+
+	global $g_3party_url, $g_jtg_key_id, $g_verify_code, $g_txnCurrency, $g_channelCode, $g_setpaystatus_order, $g_getinvoice_order, $g_show_request;
+	$table = 'data_order';
+	$reuqire_fields 	= ['paymode','orderNo','amount','QRcode','payment_order_no','bill_no','PosArea','parking_id','device_id'];
+	$input_fields 		= ['order_no', 'api','pay_time','pay_method','pay_status','amount','avalible','json_str','remark'];
+
+    $who_call		= isset($_POST['who_call'   ]) ? $_POST['who_call'   ] : 'app'			; // 誰呼叫
+    $method	    	= isset($_POST['method'     ]) ? $_POST['method'     ] : ''				; // GET, POST, PUT, DELETE
+    $mode	    	= isset($_POST['paymode'    ]) ? $_POST['paymode'    ] : ''				; // creditbyscan, debit
+    $operateSrc		= isset($_POST['operateSrc'	]) ? $_POST['operateSrc' ] : ''				; // 車號或會員
+    $txnDir			= isset($_POST['txnDir'  	]) ? $_POST['txnDir' 	 ] : 'RQ'			; // 
+    $amount			= isset($_POST['amount'  	]) ? $_POST['amount' 	 ] : '0' 			; // 
+    $orderNo		= isset($_POST['orderNo'  	]) ? $_POST['orderNo' 	 ] : '' 			; // 
+    $txnCurrency	= isset($_POST['txnCurrency']) ? $_POST['txnCurrency'] : $g_txnCurrency	; // 
+    $QRcode			= isset($_POST['QRcode'		]) ? $_POST['QRcode' 	 ] : ''				; // 
+    $carrierId1		= isset($_POST['carrierId1'	]) ? $_POST['carrierId1' ] : ''				; // 
+
+    $payment_order_no	= isset($_POST['payment_order_no'  	]) ? $_POST['payment_order_no' 	] : '' 				; // 繳費機訂單號碼
+    $pay_log			= isset($_POST['pay_log'  			]) ? $_POST['pay_log' 	 		] : 'TwPay主掃'	 	; // 支付log
+    $realpay			= isset($_POST['realpay'  			]) ? $_POST['realpay' 	 		] : '' 				; // 實繳金額
+    $discount			= isset($_POST['discount'  			]) ? $_POST['discount' 	 		] : '0' 			; // 折扣金額
+    $bill_no			= isset($_POST['bill_no'  			]) ? $_POST['bill_no' 	 		] : '' 				; // 帳務序號
+    $PosArea			= isset($_POST['PosArea'  			]) ? $_POST['PosArea' 	 		] : '' 				; // 場域代碼
+    $parking_id			= isset($_POST['parking_id'			]) ? $_POST['parking_id' 		] : '' 				; // 停車場代碼
+    $device_id			= isset($_POST['device_id'			]) ? $_POST['device_id'  		] : '' 				; // 設備Id
+
+    $carrierId1			= isset($_POST['carrierId1'  		]) ? $_POST['carrierId1' 	 	] : '' 				; // 悠遊卡：(免填) 共通用載具：手機條碼 自然人憑證：憑證號碼
+    $carrierId2			= isset($_POST['carrierId2'  		]) ? $_POST['carrierId2' 	 	] : '' 				; // 悠遊卡：(免填) 共通用載具：手機條碼 自然人憑證：憑證號碼
+    $email				= isset($_POST['email'  			]) ? $_POST['email' 	 		] : '' 				; // 電子信箱
+    $companyNo			= isset($_POST['companyNo'  		]) ? $_POST['companyNo' 	 	] : '' 				; // 統一編號
+    $carrierType		= isset($_POST['carrierType'  		]) ? $_POST['carrierType' 	 	] : '' 				; // 載具類別0: 悠遊卡 1: 通用載具(手機) 2: 自然人憑證
+    $loveId				= isset($_POST['loveId'  			]) ? $_POST['loveId' 	 		] : '' 				; // 愛心碼
+	
+    $require_param['paymode'] = $mode;
+    $require_param['orderNo'] = $orderNo;
+    $require_param['amount' ] = $amount;
+    $require_param['QRcode' ] = $QRcode;
+    $require_param['payment_order_no' 	] = $payment_order_no;
+    $require_param['bill_no' 			] = $bill_no;
+    $require_param['PosArea' 			] = $PosArea;
+    $require_param['parking_id' 		] = $parking_id;
+    $require_param['device_id' 			] = $device_id;
+	
+
+	$api 		= $func 	= "JTG_order";
+	$api_name 	= $caption 	= "被掃(下單支付)";
+	$member_id 	= "JTG_TWPAY";
+    
+	$remote_ip		= get_remote_ip();
+	$error 			= "";
+	$res 			= array();
+	$token_base64 	= "";
+	$ret_msg 		= "";
+	$user_token		= "";
+
+    // // 看門狗
+    // $role = ""; $order_limit = 0;
+    // // if (!empty($json_token)) {
+    //     $data = validToken($json_token, $member_id, $role, $order_limit);
+    //     if ($data["status"] == "false") {
+    //         echo (json_encode($data, JSON_UNESCAPED_UNICODE));
+    //         return;
+    //     }
+    // // }
+	
+	try {
+		// 判斷必要參數
+		$invalidate_param = "";
+		for ($i = 0; $i < count($reuqire_fields); $i++) {
+			$re_field = $reuqire_fields[$i];
+			if (empty($require_param[$re_field])) {
+				$invalidate_param .= (!empty($invalidate_param)) ? "," : "";
+				$invalidate_param .= $re_field;
+			}
+		}
+		if (!empty($invalidate_param)) {
+			$res = result_message("false", "0x0202", "API parameter is required! $invalidate_param 為空值", []);
+			JTG_wh_log($remote_ip, "$func API return :$error", $member_id);
+			echo (json_encode($res, JSON_UNESCAPED_UNICODE));
+			exit;
+		}
+		// ------------------------------------------------------------------------
+		$storeId 		= getStoreIdByScan($mode);
+		$endpointCode 	= getEndpointCodeByScan($mode);
+
+		// entry
+		$error = ""; $ret_msg = "";
+		$db = new CXDB($remote_ip);
+		$conn_res = $db->connect($link, $member_id, "");
+		if ($conn_res["status"] == "true") {
+
+			$url = $g_3party_url."order";
+			if ($mode == 'credit') {
+				$requestData = [
+					'txnDir'          		=> $txnDir,
+					'creditStoreId'			=> $storeId,
+					'creditEndpointCode' 	=> $endpointCode,
+					'terminalId'      		=> $g_terminalId,
+					'orderNumber'  			=> $orderNo,
+					'txnAmt'          		=> $amount."00",
+					'txnCurrency'     		=> $txnCurrency,
+					'txnDateTime'     		=> date('YmdHis'),
+					'txnFISCTac'    		=> $QRcode,
+					'carrierId1'    		=> $carrierId1
+				];
+			} else {
+				$requestData = [
+					'txnDir'          		=> $txnDir,
+					'storeId'         		=> $storeId,
+					'endpointCode'    		=> $endpointCode,
+					'terminalId'      		=> $g_terminalId,
+					'orderNumber'  			=> $orderNo,
+					'txnAmt'          		=> $amount."00",
+					'txnCurrency'     		=> $txnCurrency,
+					'txnDateTime'     		=> date('YmdHis'),
+					'txnFISCTac'    		=> $QRcode,
+					'carrierId1'    		=> $carrierId1
+				];
+			}
+
+			// 產生 sign
+			$requestData['sign'] = generateSign($requestData, $g_verify_code);
+			$post_data = json_encode($requestData, JSON_UNESCAPED_UNICODE);
+			$modezhtw 		= getPaymodeZhtw($mode);
+			JTG_wh_log($remote_ip, "$func API Entry :mode = ($mode)$modezhtw, storeId = $storeId, endpointCode =$endpointCode", $member_id);
+			if ($g_show_request) {
+				echo "Request\n".$post_data."\n"."RESPONSE\n";
+			}
+			
+			$result = callAPI($error, $url, $post_data, "POST", 25, false, getHuananHeader());
+			if ($g_show_request) {
+				echo "$result\n---------------------------------\n";
+			}
+			
+			// 初始化參數
+			try {
+				$input_param['order_no'		] = $orderNo;
+				$input_param['mode'			] = $mode;
+				$input_param['storeId'		] = $storeId;
+				$input_param['endpointCode'	] = $endpointCode;
+				$input_param['amount'		] = $amount;
+				
+				$input_param['payment_order_no'	] = $payment_order_no;
+				$input_param['pay_log'			] = $pay_log;
+				$input_param['realpay'			] = $realpay;
+				$input_param['discount'			] = $discount;
+				$input_param['bill_no'			] = $bill_no;
+				$input_param['PosArea'			] = $PosArea;
+				$input_param['parking_id'		] = $parking_id;
+				$input_param['device_id'		] = $device_id;
+				
+				$input_param['carrierId1'		] = $carrierId1;
+				$input_param['carrierId2'		] = $carrierId2;
+				$input_param['email'			] = $email;
+				$input_param['companyNo'		] = $companyNo;
+				$input_param['carrierType'		] = $carrierType;
+				$input_param['loveId'			] = $loveId;
+				$input_param['parking_url'		] = $parking_url;
+
+				$input_param['operate_src'	] = $operateSrc;
+				$input_param['api'			] = $api;
+				$input_param['api_zhtw'		] = $api_name;
+				$input_param['avalible'		] = "1";
+				$input_param['json_str'		] = protectSqlValue($link, $result);
+				// saveLog用
+				$input_param['request'		] = protectSqlValue($link, $post_data);
+				$input_param['response'		] = protectSqlValue($link, $result);
+			} catch(Exception $e) {}
+
+			if (!empty($error)) {
+				$input_param['remark'] = protectSqlValue($link, "ERROR :".$error);
+				$effect_row = $db->saveLog($link, $input_param, $ret_msg);
+				$res = result_message("false", "0x020E", "API return :$error", []);
+				JTG_wh_log($remote_ip, "$func API return :$error", $member_id);
+				echo (json_encode($res, JSON_UNESCAPED_UNICODE));
+				exit;
+			}
+			
+			// ------------------------------------------------------------------------
+			JTG_wh_log($remote_ip, "$func $caption :$result", $member_id);
+			$obj 			= json_decode($result, true);
+			$txnDir 		= isset($obj["txnDir"			]) ? $obj["txnDir"	 		] : '';
+			$respCode 		= isset($obj["respCode"			]) ? $obj["respCode"	 	] : '';
+			$respDesc 		= isset($obj["respDesc"			]) ? $obj["respDesc"	 	] : '';
+			$restCodeZhtw = hncbRespCodeMessage($respCode);
+			// 初始化參數
+			try {
+				// saveLog用
+				$input_param['resp_code'	] = $respCode;
+				$input_param['resp_msg'		] = $restCodeZhtw;
+				$input_param['twqr_resp_msg'] = protectSqlValue($link, $respDesc);
+			} catch(Exception $e) {}
+
+			// Do 建立訂單
+			$effect_row = $db->modifyDataOrder($link, $input_param, $ret_msg);
+
+			// 預設停管設定訂單狀態與發票
+			$SetPayStatus_json = ""; $GetInvoice_json = "";
+			$input_param['res_set_pay_status'] = $SetPayStatus_json;
+			$input_param['res_invoice_status'] = $GetInvoice_json;
+
+			// 紀錄至資料庫
+			// $effect_row = $db->saveLog($link, $input_param, $ret_msg);
+			if (strlen($respCode) > 0) { // 成功
+				if ($respCode == "0000") { // 成功
+					$Reference_No = isset($obj["txnSeqno"]) ? $obj["txnSeqno"] : '';
+					$input_param['Reference_No'] = $Reference_No;
+					// Do 更新訂單狀態
+					$input_param['pay_status'] = "1";
+					$input_param['pay_time'	 ] = getDateFormat6("");
+					$input_param['pay_method'] = "8";
+					$input_param['pay_source'] = "3";
+					
+					if ($g_setpaystatus_order) {
+						// 寫回停管
+						if (strlen($realpay) == 0) $relpay = $amount;
+						$pay_method = "8"; $pay_source = "3";
+						$SetPayStatus_json 	= setPayStatus($parking_url, $parking_id, $orderNo, $realpay, $discount, "1", $pay_log, $bill_no, $payment_order_no, $pay_method, "2");
+						
+							$obj4SetPayStatus	= json_decode($SetPayStatus_json, true);
+						}
+						JTG_wh_log($remote_ip, "$func - [setPayStatus] API return :$SetPayStatus_json", $member_id);
+						if ($obj4SetPayStatus['code'] == "0x0200") { // 設定訂單狀態成功
+							$input_param['set_pay_status'] = "1";
+							if ($g_getinvoice_order) {
+								$GetInvoice_json 	= getInvoice($url, $parking_id, $orderNo, $operate_src, $amount, $carrierId1, $carrierId2, $email, $carrierType, $loveId);
+								$obj4GetInvoice		= json_decode($SetPayStatus_json, true);
+								JTG_wh_log($remote_ip, "$func - [getInvoice] API return :$GetInvoice_json", $member_id);
+								$input_param['invoice_status'] = "0";
+								if ($obj4GetInvoice['code'] == "0x0200") { // 設定訂單狀態成功
+									$input_param['invoice_status'] = "1";
+								}
+							}
+						} else { // 設定訂單狀態異常
+							$input_param['set_pay_status'] = "0";
+							if ($g_getinvoice_order) {
+								$input_param['invoice_status'] = "0";
+							}
+						}
+						$input_param['res_set_pay_status'] = $SetPayStatus_json;
+						$input_param['res_invoice_status'] = $GetInvoice_json;
+
+						$effect_row = $db->modifyDataOrder($link, $input_param, $ret_msg);
+
+						$data['SetPayStatus_json'] = $SetPayStatus_json;
+						$data['obj4SetPayStatus' ] = $obj4SetPayStatus;
+					
+						// echo "effect_row :".$effect_row."\n";
+						if ($effect_row > 0) {
+							// echo "modify success\n";
+							$res = result_message("true", "0x0200", "成功", $data);
+						} else {
+							$res = result_message("false", "0x0205", "sql error :".$ret_msg, []);
+						}
+						$res = result_message("true", "0x0200", $message, $obj);
+					} else {
+						$res = result_message("true", "0x0200", "成功(未觸發停管)", $data);
+					}
+				} else {
+					$res = result_message("false", "0x0202", "($respCode)$restCodeZhtw", $obj);
+				}
+			} else { // 異常
+				$res = result_message("false", "0x020E", "API return :未知錯誤$respCode", $obj);
+			}
+		} else {
+			$res = result_message("false", "0x0205", "connect to mysql error :".$result, []);
+		}
+	} catch (Exception $e) {
+		$res = result_message("false", "0xE209", "Exception error! error detail:".$e->getMessage(), []);
+		JTG_wh_log_Exception($remote_ip, $func ." ".get_error_symbol($data["status_code"]).$data["status_code"]." ".$data["responseMessage"], $member_id);
+	} finally {
+		$data_close_conn = close_connection_finally($link, $remote_ip, $member_id);
+		if ($data_close_conn["status"] == "false") $data = $data_close_conn;
+	}
+	
+	JTG_wh_log($remote_ip, $func ." ".get_error_symbol($res["status_code"])." result :".$res["responseMessage"]."\r\n".$g_exit_symbol.$caption." exit ->"."\r\n", $member_id);
+	echo (json_encode($res, JSON_UNESCAPED_UNICODE));
+?>
