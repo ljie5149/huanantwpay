@@ -906,20 +906,17 @@ echo "ori_sid :$ori_sid\n";
         }
         // ==============================================================================================================================
         
-        public function modifyDataOrder($link, $year, $input, &$ret_msg, $skip_resp = false)
+        public function modifyDataOrder($link, $input, &$ret_msg)
         {
             $func   = "modifyDataOrder";
-			$table  = 'data_order_'.$year;
-            if ($skip_resp) $input['response'] = "";
-            $array_field_src = ['scanType','storeId','endpointCode'
-                                ,'credit_storeId','credit_endpointCode'
-                                ,'api', 'api_zhtw', 'operate_src','resp_code','resp_msg'
+			$table  = 'data_order';
+            $array_field_src = ['mode','storeId','endpointCode','api', 'api_zhtw', 'operate_src','resp_code','resp_msg'
                                 ,'payment_order_no','pay_log','realpay','discount','bill_no','PosArea','parking_id','device_id'
                                 ,'carrierId1','carrierId2','email','companyNo','carrierType','loveId','parking_url'
                                 ,'Reference_No','QRcode'
                                 ,'set_pay_status','invoice_status'
                                 ,'res_set_pay_status','res_invoice_status'
-                                ,'pay_time','pay_method','pay_status','amount','request','response','txnType_code','txnType_msg','notify_resp_msg','avalible','remark'];
+                                ,'pay_time','pay_method','pay_status','amount','request','response','avalible','remark'];
             
             $fields = ""; $values = ""; $chg_api = "";
             $order_no   = getVariant($input, 'order_no' );
@@ -973,22 +970,20 @@ echo "ori_sid :$ori_sid\n";
             // return $sql;
             // echo "Sql :".$sql."\n";
             $ret_msg_tmp = "";
-            $this->modifyLogOrder($link, $year, $input, $ret_msg_tmp);
+            $this->modifyLogOrder($link, $input, $ret_msg_tmp);
             return $this->execute($link, $sql, $ret_msg);
         }
-        public function modifyLogOrder($link, $year, $input, &$ret_msg)
+        public function modifyLogOrder($link, $input, &$ret_msg)
         {
             $func   = "modifyLogOrder";
-			$table  = 'log_order_'.$year;
-            $array_field_src = ['type','scanType','storeId','endpointCode'
-                                ,'credit_storeId','credit_endpointCode'
-                                ,'api','api_zhtw','operate_src','resp_code','resp_msg'
+			$table  = 'log_order';
+            $array_field_src = ['type','mode','storeId','endpointCode','api','api_zhtw','operate_src','resp_code','resp_msg'
                                 ,'payment_order_no','pay_log','realpay','discount','bill_no','PosArea','parking_id','device_id'
                                 ,'carrierId1','carrierId2','email','companyNo','carrierType','loveId','parking_url'
                                 ,'Reference_No','QRcode'
                                 ,'set_pay_status','invoice_status'
                                 ,'res_set_pay_status','res_invoice_status'
-                                ,'pay_time','pay_method','pay_status','amount','request','response','txnType_code','txnType_msg','notify_resp_msg','avalible','remark'];
+                                ,'pay_time','pay_method','pay_status','amount','request','response','avalible','remark'];
             $fields = ""; $values = "";
             
             $order_no   = getVariant($input, 'order_no' );
@@ -1013,11 +1008,9 @@ echo "ori_sid :$ori_sid\n";
 
         public function saveLog($link, $input, &$ret_msg) {
             //member_id	member_name	store_id	function_name	log_date	action_type
-			$table  = 'log_message';
-            $array_field_src = ['type','scanType','storeId','endpointCode'
-                                ,'credit_storeId','credit_endpointCode'
-                                ,'api','api_zhtw','operate_src'
-                                ,'resp_code','resp_msg','request','response','txnType_code','txnType_msg','remark'];
+            $table = "log_message";
+            $array_field_src = ['type','mode','storeId','endpointCode','api','api_zhtw','operate_src'
+                                ,'resp_code','resp_msg','twqr_resp_msg','request','response','remark'];
             $fields = ""; $values = "";
             
             $order_no   = getVariant($input, 'order_no' );

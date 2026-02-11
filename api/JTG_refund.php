@@ -12,11 +12,12 @@
 
 	global $g_3party_url, $g_jtg_key_id, $g_verify_code, $g_terminalId, $g_txnCurrency, $g_channelCode, $g_show_request;
 	$table = 'data_order';
-	$reuqire_fields 	= ['orderNo','amount'];
+	$reuqire_fields 	= ['paymode','orderNo','amount'];
 	$input_fields 		= ['order_no', 'api','pay_time','pay_method','pay_status','amount','avalible','json_str','remark'];
 
     $who_call		= isset($_POST['who_call'   	]) ? $_POST['who_call'  	] : 'app'; // 誰呼叫
     $method	    	= isset($_POST['method'     	]) ? $_POST['method'    	] : ''	; // GET, POST, PUT, DELETE
+    $mode	    	= isset($_POST['paymode'    	]) ? $_POST['paymode'    	] : ''	; // credit, debit
     $operateSrc		= isset($_POST['operateSrc'		]) ? $_POST['operateSrc'	] : ''	; // 車號或會員
     $txnDir			= isset($_POST['txnDir'  		]) ? $_POST['txnDir' 		] : 'RQ'; // 
     $amount			= isset($_POST['amount'  		]) ? $_POST['amount' 		] : '0' ; // 
@@ -26,7 +27,9 @@
     $QRcode			= isset($_POST['QRcode'			]) ? $_POST['QRcode' 	 	] : ''	; //  
     $bankNo			= isset($_POST['bankNo'			]) ? $_POST['bankNo' 	 	] : ''	; // 
 	
+    $require_param['paymode'] = $mode;
     $require_param['orderNo'] = $orderNo;
+    $require_param['amount' ] = $amount;
 	
 	$api 		= $func 	= "JTG_refund";
 	$api_name 	= $caption 	= "退款/取消訂單";
@@ -50,72 +53,49 @@
     // // }
 	
 	try {
+		// 判斷必要參數
+		$invalidate_param = "";
+		for ($i = 0; $i < count($reuqire_fields); $i++) {
+			$re_field = $reuqire_fields[$i];
+			if (empty($require_param[$re_field])) {
+				$invalidate_param .= (!empty($invalidate_param)) ? "," : "";
+				$invalidate_param .= $re_field;
+			}
+		}
+		if (!empty($invalidate_param)) {
+			$res = result_message("false", "0x0202", "API parameter is required! $invalidate_param 為空值", []);
+			JTG_wh_log($remote_ip, "$func API return :$error", $member_id);
+			echo (json_encode($res, JSON_UNESCAPED_UNICODE));
+			exit;
+		}
 		// ------------------------------------------------------------------------
+		$storeId 		= getStoreIdByScan($mode);
+		$endpointCode 	= getEndpointCodeByScan($mode);
 
 		// entry
-		$input_param['api'			] = $api;
-		$input_param['api_zhtw'		] = $api_name;
-		$input_param['avalible'		] = "1";
-
-		$error = ""; $ret_msg = ""; $found_data = false;
+		$error = ""; $ret_msg = "";
 		$db = new CXDB($remote_ip);
 		$conn_res = $db->connect($link, $member_id, "");
 		if ($conn_res["status"] == "true") {
-			$process_year = intval(getDateTimeFormat("", "Y"));
-			createTWpayTable($link, $process_year);
-			
 			// 取得訂單資料
             try {
-				for ($iyear = $process_year; $iyear >= $g_start_year; $iyear--) {
-					$table = "data_order_$iyear";
-					
-					$sql = "SELECT * FROM $table WHERE 1=1";
-					$sql.= merge_sql_string_if_not_empty("order_no", $orderNo);
-					// echo $sql."\n";
-					if ($result = mysqli_query($link, $sql)) {
-						if (mysqli_num_rows($result) > 0) {
-							if ($row = mysqli_fetch_assoc($result)) {
-								$scanType		= $row['scanType'	 ];
-								$amount 		= $row['amount'		 ];
-								$storeId 		= $row['storeId'	 ];
-								$endpointCode 	= $row['endpointCode'];
-								$txnSeqno 		= $row['Reference_No'];
-								$found_data = true;
-								$process_year = $iyear;
-								break;
-							}
+				$sql = "SELECT * FROM $table WHERE 1=1";
+				$sql.= merge_sql_string_if_not_empty("order_no", $orderNo);
+				// echo $sql."\n";
+                if ($result = mysqli_query($link, $sql)) {
+                    if (mysqli_num_rows($result) > 0) {
+						if ($row = mysqli_fetch_assoc($result)) {
+							$mode 			= $row['mode'];
+							$amount 		= $row['amount'];
+							$storeId 		= $row['storeId'];
+							$endpointCode 	= $row['endpointCode'];
+							$txnSeqno 		= $row['Reference_No'];
+							$hadData = true;
 						}
-					}
-				}
-				JTG_wh_log($remote_ip, "$func API Entry : storeId = $storeId, endpointCode =$endpointCode", $member_id);
+                    }
+                }
             } catch (Exception $e) { }
-			if (!$found_data) {
-				$res = result_message("false", "0x0204", "訂單 $orderNo 不存在，無法進行退款作業!", []);
-				JTG_wh_log($remote_ip, "$func search data return :".$res['responseMessage'], $member_id);
-				echo (json_encode($res, JSON_UNESCAPED_UNICODE));
-				$input_param['resp_code'	] = protectSqlValue($link, $res['code']);
-				$input_param['resp_msg'		] = protectSqlValue($link, $res['responseMessage']);
-				$effect_row = $db->saveLog($link, $input_param, $ret_msg);
-				exit;
-			}
-			$table = "data_order_$process_year";
-    		$require_param['amount' ] = $amount;
-			
-			// 判斷必要參數
-			$invalidate_param = "";
-			for ($i = 0; $i < count($reuqire_fields); $i++) {
-				$re_field = $reuqire_fields[$i];
-				if (empty($require_param[$re_field])) {
-					$invalidate_param .= (!empty($invalidate_param)) ? "," : "";
-					$invalidate_param .= $re_field;
-				}
-			}
-			if (!empty($invalidate_param)) {
-				$res = result_message("false", "0x0202", "API parameter is required! $invalidate_param 為空值", []);
-				JTG_wh_log($remote_ip, "$func API return :$error", $member_id);
-				echo (json_encode($res, JSON_UNESCAPED_UNICODE));
-				exit;
-			}
+			JTG_wh_log($remote_ip, "$func API Entry :mode = ($mode)$modezhtw, storeId = $storeId, endpointCode =$endpointCode", $member_id);
 
 			$url = $g_3party_url."refund";
 			$requestData = [
@@ -153,6 +133,9 @@
 				$input_param['endpointCode'	] = $endpointCode;
 				$input_param['amount'		] = $amount;
 				$input_param['operate_src'	] = $operateSrc;
+				$input_param['api'			] = $api;
+				$input_param['api_zhtw'		] = $api_name;
+				$input_param['avalible'		] = "1";
 				$input_param['json_str'		] = protectSqlValue($link, $result);
 				// saveLog用
 				$input_param['request'		] = protectSqlValue($link, $post_data);
@@ -186,10 +169,10 @@
 			if (strlen($respCode) > 0) { // 成功
 				if ($respCode == "0000" || $respCode == "4001") { // 成功
 					// Do 更新訂單狀態
-					$input_param['pay_status'] = "3";
+					$input_param['pay_status'] = "2";
 					$input_param['pay_time'	 ] = getDateFormat6("");
 					$input_param['pay_method'] = "8";
-					$effect_row = $db->modifyDataOrder($link, $process_year, $input_param, $ret_msg);
+					$effect_row = $db->modifyDataOrder($link, $input_param, $ret_msg);
 					
 					// echo "effect_row :".$effect_row."\n";
 					if ($effect_row > 0) {

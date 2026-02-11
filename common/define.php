@@ -45,15 +45,12 @@
 		QRCODE被掃MID: 008537589956002  TID: 60020001
 */
 	$g_is_remote 			= true;
-	$g_setpaystatus_notify	= true;
-	$g_getinvoice_notify	= true;
 	$g_setpaystatus_inquery	= false;
 	$g_getinvoice_inquery	= false;
 	$g_setpaystatus_order	= false;
 	$g_getinvoice_order		= false;
 	$g_show_request			= true;
 	$g_test_mode 			= true;
-	$g_start_year			= 2026;
 
 	// 華南TWpay參數
 	$g_3party_url 		= ($g_test_mode) ? "https://qrtest.hncb.com.tw/eWalletWebapp/api/POSApp/" :

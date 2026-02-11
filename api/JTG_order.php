@@ -10,15 +10,14 @@
     include_once "./../common/entry.php";
 	header('Content-Type: application/json');
 
-	global $g_start_year;
 	global $g_3party_url, $g_jtg_key_id, $g_verify_code, $g_txnCurrency, $g_channelCode, $g_setpaystatus_order, $g_getinvoice_order, $g_show_request;
-	global $g_storeId4debitcard, $g_endpointCode4debitcard, $g_storeId4creditbyscan, $g_endpointCode4creditbyscan;
 	$table = 'data_order';
-	$reuqire_fields 	= ['orderNo','amount','QRcode','payment_order_no','bill_no','PosArea','parking_id','device_id'];
+	$reuqire_fields 	= ['paymode','orderNo','amount','QRcode','payment_order_no','bill_no','PosArea','parking_id','device_id'];
 	$input_fields 		= ['order_no', 'api','pay_time','pay_method','pay_status','amount','avalible','json_str','remark'];
 
     $who_call		= isset($_POST['who_call'   ]) ? $_POST['who_call'   ] : 'app'			; // 誰呼叫
     $method	    	= isset($_POST['method'     ]) ? $_POST['method'     ] : ''				; // GET, POST, PUT, DELETE
+    $mode	    	= isset($_POST['paymode'    ]) ? $_POST['paymode'    ] : ''				; // creditbyscan, debit
     $operateSrc		= isset($_POST['operateSrc'	]) ? $_POST['operateSrc' ] : ''				; // 車號或會員
     $txnDir			= isset($_POST['txnDir'  	]) ? $_POST['txnDir' 	 ] : 'RQ'			; // 
     $amount			= isset($_POST['amount'  	]) ? $_POST['amount' 	 ] : '0' 			; // 
@@ -28,7 +27,7 @@
     $carrierId1		= isset($_POST['carrierId1'	]) ? $_POST['carrierId1' ] : ''				; // 
 
     $payment_order_no	= isset($_POST['payment_order_no'  	]) ? $_POST['payment_order_no' 	] : '' 				; // 繳費機訂單號碼
-    $pay_log			= isset($_POST['pay_log'  			]) ? $_POST['pay_log' 	 		] : 'TwPay被掃'	 	; // 支付log
+    $pay_log			= isset($_POST['pay_log'  			]) ? $_POST['pay_log' 	 		] : 'TwPay主掃'	 	; // 支付log
     $realpay			= isset($_POST['realpay'  			]) ? $_POST['realpay' 	 		] : '' 				; // 實繳金額
     $discount			= isset($_POST['discount'  			]) ? $_POST['discount' 	 		] : '0' 			; // 折扣金額
     $bill_no			= isset($_POST['bill_no'  			]) ? $_POST['bill_no' 	 		] : '' 				; // 帳務序號
@@ -43,6 +42,7 @@
     $carrierType		= isset($_POST['carrierType'  		]) ? $_POST['carrierType' 	 	] : '' 				; // 載具類別0: 悠遊卡 1: 通用載具(手機) 2: 自然人憑證
     $loveId				= isset($_POST['loveId'  			]) ? $_POST['loveId' 	 		] : '' 				; // 愛心碼
 	
+    $require_param['paymode'] = $mode;
     $require_param['orderNo'] = $orderNo;
     $require_param['amount' ] = $amount;
     $require_param['QRcode' ] = $QRcode;
@@ -91,72 +91,49 @@
 			exit;
 		}
 		// ------------------------------------------------------------------------
-		// $storeId 		= getStoreIdByScan($mode);
-		// $endpointCode 	= getEndpointCodeByScan($mode);
+		$storeId 		= getStoreIdByScan($mode);
+		$endpointCode 	= getEndpointCodeByScan($mode);
 
 		// entry
-		$error = ""; $ret_msg = ""; $found_data = false;
+		$error = ""; $ret_msg = "";
 		$db = new CXDB($remote_ip);
 		$conn_res = $db->connect($link, $member_id, "");
 		if ($conn_res["status"] == "true") {
-			$process_year = intval(getDateTimeFormat("", "Y"));
-			createTWpayTable($link, $process_year);
-
-			for ($iyear = $process_year; $iyear >= $g_start_year; $iyear--) {
-				$table = "data_order_$iyear";
-
-				$sql = "SELECT * FROM $table WHERE 1=1";
-				$sql.= merge_sql_string_if_not_empty("order_no", $orderNo);
-				// $sql.= merge_sql_string_if_not_empty("pay_status", "1");
-				if ($result = mysqli_query($link, $sql)) {
-					if (mysqli_num_rows($result) > 0) {
-						if ($row = mysqli_fetch_assoc($result)) {
-							$pay_status = $row['pay_status'];
-							if ($pay_status == "1") {
-								$res = result_message("false", "0x0205", "訂單 $orderNo 已存在且已付款!", []);
-								JTG_wh_log($remote_ip, "$func search data return :".$res['responseMessage'], $member_id);
-								echo (json_encode($res, JSON_UNESCAPED_UNICODE));
-								exit;
-							}
-							$found_data = true;
-							$process_year = $iyear;
-							break;
-						}
-					}
-				}
-			}
-			// if (!$found_data) {
-			// 	$res = result_message("false", "0x0204", "訂單 $orderNo 不存在，請確認是否使用TWQR繳費!", []);
-			// 	JTG_wh_log($remote_ip, "$func search data return :".$res['responseMessage'], $member_id);
-			// 	echo (json_encode($res, JSON_UNESCAPED_UNICODE));
-			// 	$input_param['resp_code'	] = protectSqlValue($link, $res['code']);
-			// 	$input_param['resp_msg'		] = protectSqlValue($link, $res['responseMessage']);
-			// 	$effect_row = $db->saveLog($link, $input_param, $ret_msg);
-			// 	exit;
-			// }
-			$table = "data_order_$process_year";
 
 			$url = $g_3party_url."order";
-			$requestData = [
-				'txnDir'          		=> $txnDir,
-				'storeId'         		=> $g_storeId4debitcard,
-				'endpointCode'    		=> $g_endpointCode4debitcard,
-				'creditStoreId'			=> $g_storeId4creditbyscan,
-				'creditEndpointCode' 	=> $g_endpointCode4creditbyscan,
-				'terminalId'      		=> $g_terminalId,
-				'orderNumber'  			=> $orderNo,
-				'txnAmt'          		=> $amount."00",
-				'txnCurrency'     		=> $txnCurrency,
-				'txnDateTime'     		=> date('YmdHis'),
-				'txnFISCTac'    		=> $QRcode,
-				'carrierId1'    		=> $carrierId1
-			];
+			if ($mode == 'credit') {
+				$requestData = [
+					'txnDir'          		=> $txnDir,
+					'creditStoreId'			=> $storeId,
+					'creditEndpointCode' 	=> $endpointCode,
+					'terminalId'      		=> $g_terminalId,
+					'orderNumber'  			=> $orderNo,
+					'txnAmt'          		=> $amount."00",
+					'txnCurrency'     		=> $txnCurrency,
+					'txnDateTime'     		=> date('YmdHis'),
+					'txnFISCTac'    		=> $QRcode,
+					'carrierId1'    		=> $carrierId1
+				];
+			} else {
+				$requestData = [
+					'txnDir'          		=> $txnDir,
+					'storeId'         		=> $storeId,
+					'endpointCode'    		=> $endpointCode,
+					'terminalId'      		=> $g_terminalId,
+					'orderNumber'  			=> $orderNo,
+					'txnAmt'          		=> $amount."00",
+					'txnCurrency'     		=> $txnCurrency,
+					'txnDateTime'     		=> date('YmdHis'),
+					'txnFISCTac'    		=> $QRcode,
+					'carrierId1'    		=> $carrierId1
+				];
+			}
 
 			// 產生 sign
 			$requestData['sign'] = generateSign($requestData, $g_verify_code);
 			$post_data = json_encode($requestData, JSON_UNESCAPED_UNICODE);
-			// $modezhtw 		= getPaymodeZhtw($mode);
-			JTG_wh_log($remote_ip, "$func API Entry :storeId = $storeId, endpointCode =$endpointCode", $member_id);
+			$modezhtw 		= getPaymodeZhtw($mode);
+			JTG_wh_log($remote_ip, "$func API Entry :mode = ($mode)$modezhtw, storeId = $storeId, endpointCode =$endpointCode", $member_id);
 			if ($g_show_request) {
 				echo "Request\n".$post_data."\n"."RESPONSE\n";
 			}
@@ -168,39 +145,37 @@
 			
 			// 初始化參數
 			try {
-				$input_param['order_no'				] = $orderNo;
-				$input_param['scanType'				] = "B"; // A：主掃，B：被掃
-				$input_param['storeId'				] = $g_storeId4debitcard;
-				$input_param['endpointCode'			] = $g_endpointCode4debitcard;
-				$input_param['credit_storeId'		] = $g_storeId4creditbyscan;
-				$input_param['credit_endpointCode'	] = $g_endpointCode4creditbyscan;
-				$input_param['amount'				] = $amount;
+				$input_param['order_no'		] = $orderNo;
+				$input_param['mode'			] = $mode;
+				$input_param['storeId'		] = $storeId;
+				$input_param['endpointCode'	] = $endpointCode;
+				$input_param['amount'		] = $amount;
 				
-				$input_param['payment_order_no'		] = $payment_order_no;
-				$input_param['pay_log'				] = $pay_log;
-				$input_param['realpay'				] = $realpay;
-				$input_param['discount'				] = $discount;
-				$input_param['bill_no'				] = $bill_no;
-				$input_param['PosArea'				] = $PosArea;
-				$input_param['parking_id'			] = $parking_id;
-				$input_param['device_id'			] = $device_id;
+				$input_param['payment_order_no'	] = $payment_order_no;
+				$input_param['pay_log'			] = $pay_log;
+				$input_param['realpay'			] = $realpay;
+				$input_param['discount'			] = $discount;
+				$input_param['bill_no'			] = $bill_no;
+				$input_param['PosArea'			] = $PosArea;
+				$input_param['parking_id'		] = $parking_id;
+				$input_param['device_id'		] = $device_id;
 				
-				$input_param['carrierId1'			] = $carrierId1;
-				$input_param['carrierId2'			] = $carrierId2;
-				$input_param['email'				] = $email;
-				$input_param['companyNo'			] = $companyNo;
-				$input_param['carrierType'			] = $carrierType;
-				$input_param['loveId'				] = $loveId;
-				$input_param['parking_url'			] = $parking_url;
+				$input_param['carrierId1'		] = $carrierId1;
+				$input_param['carrierId2'		] = $carrierId2;
+				$input_param['email'			] = $email;
+				$input_param['companyNo'		] = $companyNo;
+				$input_param['carrierType'		] = $carrierType;
+				$input_param['loveId'			] = $loveId;
+				$input_param['parking_url'		] = $parking_url;
 
-				$input_param['operate_src'			] = $operateSrc;
-				$input_param['api'					] = $api;
-				$input_param['api_zhtw'				] = $api_name;
-				$input_param['avalible'				] = "1";
-				$input_param['json_str'				] = protectSqlValue($link, $result);
+				$input_param['operate_src'	] = $operateSrc;
+				$input_param['api'			] = $api;
+				$input_param['api_zhtw'		] = $api_name;
+				$input_param['avalible'		] = "1";
+				$input_param['json_str'		] = protectSqlValue($link, $result);
 				// saveLog用
-				$input_param['request'				] = protectSqlValue($link, $post_data);
-				$input_param['response'				] = protectSqlValue($link, $result);
+				$input_param['request'		] = protectSqlValue($link, $post_data);
+				$input_param['response'		] = protectSqlValue($link, $result);
 			} catch(Exception $e) {}
 
 			if (!empty($error)) {
@@ -228,7 +203,7 @@
 			} catch(Exception $e) {}
 
 			// Do 建立訂單
-			$effect_row = $db->modifyDataOrder($link, $process_year, $input_param, $ret_msg);
+			$effect_row = $db->modifyDataOrder($link, $input_param, $ret_msg);
 
 			// 預設停管設定訂單狀態與發票
 			$SetPayStatus_json = ""; $GetInvoice_json = "";
@@ -238,7 +213,7 @@
 			// 紀錄至資料庫
 			// $effect_row = $db->saveLog($link, $input_param, $ret_msg);
 			if (strlen($respCode) > 0) { // 成功
-				if ($respCode == "0000" || $respCode == "4001") { // 成功
+				if ($respCode == "0000") { // 成功
 					$Reference_No = isset($obj["txnSeqno"]) ? $obj["txnSeqno"] : '';
 					$input_param['Reference_No'] = $Reference_No;
 					// Do 更新訂單狀態
@@ -250,23 +225,18 @@
 					if ($g_setpaystatus_order) {
 						// 寫回停管
 						if (strlen($realpay) == 0) $relpay = $amount;
-						$pay_method = "8"; $pay_source = "3"; $req_statusjson = "";
-						$SetPayStatus_json 	= setPayStatus($req_statusjson, $parking_url, $parking_id, $orderNo, $realpay, $discount, "1", $pay_log, $bill_no, $payment_order_no, $pay_method, "2");
-						$obj4SetPayStatus	= json_decode($SetPayStatus_json, true);
+						$pay_method = "8"; $pay_source = "3";
+						$SetPayStatus_json 	= setPayStatus($parking_url, $parking_id, $orderNo, $realpay, $discount, "1", $pay_log, $bill_no, $payment_order_no, $pay_method, "2");
+						
+							$obj4SetPayStatus	= json_decode($SetPayStatus_json, true);
+						}
 						JTG_wh_log($remote_ip, "$func - [setPayStatus] API return :$SetPayStatus_json", $member_id);
-						$input_param['request'		] = protectSqlValue($link, $req_statusjson);
-						$input_param['response'		] = protectSqlValue($link, $SetPayStatus_json);
-						$effect_row = $db->saveLog($link, $input_param, $ret_msg);
 						if ($obj4SetPayStatus['code'] == "0x0200") { // 設定訂單狀態成功
 							$input_param['set_pay_status'] = "1";
 							if ($g_getinvoice_order) {
-								$req_invoicejson = "";
-								$GetInvoice_json 	= getInvoice($req_invoicejson, $url, $parking_id, $orderNo, $operate_src, $amount, $carrierId1, $carrierId2, $email, $carrierType, $loveId);
+								$GetInvoice_json 	= getInvoice($url, $parking_id, $orderNo, $operate_src, $amount, $carrierId1, $carrierId2, $email, $carrierType, $loveId);
 								$obj4GetInvoice		= json_decode($SetPayStatus_json, true);
 								JTG_wh_log($remote_ip, "$func - [getInvoice] API return :$GetInvoice_json", $member_id);
-								$input_param['request'		] = protectSqlValue($link, $req_invoicejson);
-								$input_param['response'		] = protectSqlValue($link, $GetInvoice_json);
-								$effect_row = $db->saveLog($link, $input_param, $ret_msg);
 								$input_param['invoice_status'] = "0";
 								if ($obj4GetInvoice['code'] == "0x0200") { // 設定訂單狀態成功
 									$input_param['invoice_status'] = "1";
@@ -281,7 +251,7 @@
 						$input_param['res_set_pay_status'] = $SetPayStatus_json;
 						$input_param['res_invoice_status'] = $GetInvoice_json;
 
-						$effect_row = $db->modifyDataOrder($link, $process_year, $input_param, $ret_msg);
+						$effect_row = $db->modifyDataOrder($link, $input_param, $ret_msg);
 
 						$data['SetPayStatus_json'] = $SetPayStatus_json;
 						$data['obj4SetPayStatus' ] = $obj4SetPayStatus;

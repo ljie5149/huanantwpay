@@ -84,6 +84,6 @@
 		
 		// if (strlen($remote_ip) 			> 0) $remote_ip 			= "_".$remote_ip;
 		// if (strlen($Remote_insurance_no) 	> 0) $Remote_insurance_no 	= "_".$Remote_insurance_no;
-		$glogfile = $dir.$file_header.'_'.date('Ymd').$Person_id.'.log';
+		$glogfile = $dir.$file_header.'log_'.date('Y_m_d').$Person_id.'.log';
 	}
 ?>
