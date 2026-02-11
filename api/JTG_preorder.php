@@ -10,20 +10,22 @@
     include_once "./../common/entry.php";
 	header('Content-Type: application/json');
 
+	global $g_start_year;
 	global $g_3party_url, $g_jtg_key_id, $g_verify_code, $g_terminalId, $g_txnCurrency, $g_channelCode, $g_show_request;
-	$table = 'log_message';
-	$reuqire_fields 	= ['paymode','orderNo','amount','payment_order_no','bill_no','PosArea','parking_id','device_id'];
+	global $g_storeId4debitcard, $g_endpointCode4debitcard, $g_storeId4credit, $g_endpointCode4credit;
+	$table = 'data_order';
+	$reuqire_fields 	= ['orderNo','amount','payment_order_no','bill_no','PosArea','parking_id','device_id'];
 	$input_fields 		= ['order_no', 'api','pay_time','pay_method','pay_status','amount','avalible','json_str','remark'];
 
     $who_call			= isset($_POST['who_call'   		]) ? $_POST['who_call'   		] : 'app'			; // 誰呼叫
     $method	    		= isset($_POST['method'     		]) ? $_POST['method'     		] : ''				; // GET, POST, PUT, DELETE
-    $mode	    		= isset($_POST['paymode'    		]) ? $_POST['paymode'    		] : ''				; // credit, debit
     $operateSrc			= isset($_POST['operateSrc'			]) ? $_POST['operateSrc' 		] : ''				; // 車號或會員
     $txnDir				= isset($_POST['txnDir'  			]) ? $_POST['txnDir' 	 		] : 'RQ'			; // 
     $amount				= isset($_POST['amount'  			]) ? $_POST['amount' 	 		] : '0' 			; // 
     $orderNo			= isset($_POST['orderNo'  			]) ? $_POST['orderNo' 	 		] : '' 				; // 
     $txnCurrency		= isset($_POST['txnCurrency'		]) ? $_POST['txnCurrency'		] : $g_txnCurrency	; // 
     $channelCode		= isset($_POST['channelCode'		]) ? $_POST['channelCode'		] : $g_channelCode	; // 
+    $expirySeconds		= isset($_POST['expirySeconds'		]) ? $_POST['expirySeconds'		] : "300"	; // 
 
     $payment_order_no	= isset($_POST['payment_order_no'  	]) ? $_POST['payment_order_no' 	] : '' 				; // 繳費機訂單號碼
     $pay_log			= isset($_POST['pay_log'  			]) ? $_POST['pay_log' 	 		] : 'TwPay主掃'	 	; // 支付log
@@ -42,7 +44,6 @@
     $loveId				= isset($_POST['loveId'  			]) ? $_POST['loveId' 	 		] : '' 				; // 愛心碼
     $parking_url		= isset($_POST['parking_url'		]) ? $_POST['parking_url'		] : '' 				; // 停管url(設定訂單狀態與開發票)
 	
-    $require_param['paymode'			] = $mode;
     $require_param['orderNo'			] = $orderNo;
     $require_param['amount' 			] = $amount;
     $require_param['payment_order_no' 	] = $payment_order_no;
@@ -89,49 +90,63 @@
 			exit;
 		}
 		// ------------------------------------------------------------------------
-		$storeId 		= getStoreId($mode);
-		$endpointCode 	= getEndpointCode($mode);
-		$modezhtw 		= getPaymodeZhtw($mode);
-		JTG_wh_log($remote_ip, "$func API Entry :mode = ($mode)$modezhtw, storeId = $storeId, endpointCode =$endpointCode", $member_id);
+		// $storeId 		= getStoreId($mode);
+		// $endpointCode 	= getEndpointCode($mode);
+		// $modezhtw 		= getPaymodeZhtw($mode);
+		// JTG_wh_log($remote_ip, "$func API Entry :mode = ($mode)$modezhtw, storeId = $storeId, endpointCode =$endpointCode", $member_id);
 		// echo "mode :$mode\n";
 		// echo "storeId :$storeId\n";
 		// echo "endpointCode :$endpointCode\n";
 		// return;
 
 		// entry
-		$error = ""; $ret_msg = "";
+		$error = ""; $ret_msg = ""; $found_data = false;
 		$db = new CXDB($remote_ip);
 		$conn_res = $db->connect($link, $member_id, "");
 		if ($conn_res["status"] == "true") {
+			$process_year = intval(getDateTimeFormat("", "Y"));
+			createTWpayTable($link, $process_year);
+
+			for ($iyear = $process_year; $iyear >= $g_start_year; $iyear--) {
+				$table = "data_order_$iyear";
+
+				$sql = "SELECT * FROM $table WHERE 1=1";
+				$sql.= merge_sql_string_if_not_empty("order_no", $orderNo);
+				// $sql.= merge_sql_string_if_not_empty("pay_status", "1");
+				if ($result = mysqli_query($link, $sql)) {
+					if (mysqli_num_rows($result) > 0) {
+						if ($row = mysqli_fetch_assoc($result)) {
+							$pay_status = $row['pay_status'];
+							if ($pay_status == "1") {
+								$res = result_message("false", "0x0205", "訂單 $orderNo 已存在且已付款!", []);
+								JTG_wh_log($remote_ip, "$func search data return :".$res['responseMessage'], $member_id);
+								echo (json_encode($res, JSON_UNESCAPED_UNICODE));
+								exit;
+							}
+							$found_data = true;
+							$process_year = $iyear;
+							break;
+						}
+					}
+				}
+			}
+			$table = "data_order_$process_year";
 
 			$url = $g_3party_url."preOrder";
-			if ($mode == 'credit') {
-				$requestData = [
-					'txnDir'          		=> $txnDir,
-					'channelCode'	  		=> $channelCode,
-					'creditStoreId'         => $storeId,
-					'creditEndpointCode'    => $endpointCode,
-					'terminalId'      		=> $g_terminalId,
-					'txnOrderNumber'  		=> $orderNo,
-					'txnAmt'          		=> $amount."00",
-					'txnCurrency'     		=> $txnCurrency,
-					'expiryDate'      		=> getDate4Nseconds(300, "", 'YmdHis')
-					// "noticeURL"   	  	=> "https://hcparking.jotangi.net/huanantwpay/api/JTG_notify.php"
-				];
-			} else {
-				$requestData = [
-					'txnDir'          		=> $txnDir,
-					'channelCode'	  		=> $channelCode,
-					'storeId'         		=> $storeId,
-					'endpointCode'    		=> $endpointCode,
-					'terminalId'      		=> $g_terminalId,
-					'txnOrderNumber'  		=> $orderNo,
-					'txnAmt'          		=> $amount."00",
-					'txnCurrency'     		=> $txnCurrency,
-					'expiryDate'      		=> getDate4Nseconds(300, "", 'YmdHis')
-					// "noticeURL"   	  	=> "https://hcparking.jotangi.net/huanantwpay/api/JTG_notify.php"
-				];
-			}
+			$requestData = [
+				'txnDir'          		=> $txnDir,
+				'channelCode'	  		=> $channelCode,
+				'storeId'         		=> $g_storeId4debitcard,
+				'endpointCode'    		=> $g_endpointCode4debitcard,
+				'creditStoreId'         => $g_storeId4credit,
+				'creditEndpointCode'    => $g_endpointCode4credit,
+				'terminalId'      		=> $g_terminalId,
+				'txnOrderNumber'  		=> $orderNo,
+				'txnAmt'          		=> $amount."00",
+				'txnCurrency'     		=> $txnCurrency,
+				'expiryDate'      		=> getDate4Nseconds(intval($expirySeconds), "", 'YmdHis')
+				// "noticeURL"   	  	=> "https://hcparking.jotangi.net/huanantwpay/api/JTG_notify.php"
+			];
 
 			// 產生 sign
 			// echo generateSign($requestData, $g_verify_code)."\n";
@@ -149,37 +164,39 @@
 			
 			// 初始化參數
 			try {
-				$input_param['order_no'			] = $orderNo;
-				$input_param['mode'				] = $mode;
-				$input_param['storeId'			] = $storeId;
-				$input_param['endpointCode'		] = $endpointCode;
-				$input_param['amount'			] = $amount;
-				$input_param['operate_src'		] = $operateSrc;
+				$input_param['order_no'				] = $orderNo;
+				$input_param['scanType'				] = "A"; // A：主掃，B：被掃
+				$input_param['storeId'				] = $g_storeId4debitcard;
+				$input_param['endpointCode'			] = $g_endpointCode4debitcard;
+				$input_param['credit_storeId'		] = $g_storeId4credit;
+				$input_param['credit_endpointCode'	] = $g_endpointCode4credit;
+				$input_param['amount'				] = $amount;
+				$input_param['operate_src'			] = $operateSrc;
 				
-				$input_param['payment_order_no'	] = $payment_order_no;
-				$input_param['pay_log'			] = $pay_log;
-				$input_param['realpay'			] = $realpay;
-				$input_param['discount'			] = $discount;
-				$input_param['bill_no'			] = $bill_no;
-				$input_param['PosArea'			] = $PosArea;
-				$input_param['parking_id'		] = $parking_id;
-				$input_param['device_id'		] = $device_id;
+				$input_param['payment_order_no'		] = $payment_order_no;
+				$input_param['pay_log'				] = $pay_log;
+				$input_param['realpay'				] = $realpay;
+				$input_param['discount'				] = $discount;
+				$input_param['bill_no'				] = $bill_no;
+				$input_param['PosArea'				] = $PosArea;
+				$input_param['parking_id'			] = $parking_id;
+				$input_param['device_id'			] = $device_id;
 				
-				$input_param['carrierId1'		] = $carrierId1;
-				$input_param['carrierId2'		] = $carrierId2;
-				$input_param['email'			] = $email;
-				$input_param['companyNo'		] = $companyNo;
-				$input_param['carrierType'		] = $carrierType;
-				$input_param['loveId'			] = $loveId;
-				$input_param['parking_url'		] = $parking_url;
+				$input_param['carrierId1'			] = $carrierId1;
+				$input_param['carrierId2'			] = $carrierId2;
+				$input_param['email'				] = $email;
+				$input_param['companyNo'			] = $companyNo;
+				$input_param['carrierType'			] = $carrierType;
+				$input_param['loveId'				] = $loveId;
+				$input_param['parking_url'			] = $parking_url;
 
-				$input_param['api'				] = $api;
-				$input_param['api_zhtw'			] = $api_name;
-				$input_param['avalible'			] = "1";
-				$input_param['json_str'			] = protectSqlValue($link, $result);
+				$input_param['api'					] = $api;
+				$input_param['api_zhtw'				] = $api_name;
+				$input_param['avalible'				] = "1";
+				$input_param['json_str'				] = protectSqlValue($link, $result);
 				// saveLog用
-				$input_param['request'			] = protectSqlValue($link, $post_data);
-				$input_param['response'			] = protectSqlValue($link, $result);
+				$input_param['request'				] = protectSqlValue($link, $post_data);
+				$input_param['response'				] = protectSqlValue($link, $result);
 			} catch(Exception $e) {}
 
 			// echo getHuananHeader()."\n";
@@ -216,7 +233,7 @@
 				$input_param['twqr_resp_msg'] = protectSqlValue($link, $respDesc);
 			} catch(Exception $e) {}
 
-			$effect_row = $db->modifyDataOrder($link, $input_param, $ret_msg);
+			$effect_row = $db->modifyDataOrder($link, $process_year, $input_param, $ret_msg);
 			// echo $effect_row."\n";
 			// return;
 
@@ -225,7 +242,7 @@
 			if (strlen($respCode) > 0) { // 成功
 				if ($respCode == "0000") { // 成功
 					// Do 建立或更新訂單資訊
-					$effect_row = $db->modifyDataOrder($link, $input_param, $ret_msg);
+					// $effect_row = $db->modifyDataOrder($link, $input_param, $ret_msg);
 					
 					// echo "effect_row :".$effect_row."\n";
 					// if ($effect_row > 0) {
