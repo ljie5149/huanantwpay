@@ -37,6 +37,7 @@
 	$ret_msg 		= "";
 	$user_token		= "";
 
+	$test02 = 0;
     // // 看門狗
     // $role = ""; $order_limit = 0;
     // // if (!empty($json_token)) {
