@@ -35,9 +35,11 @@ CREATE TABLE data_order (
     api_zhtw                    VARCHAR(500) 	    NULL COMMENT 'api名稱'	                        ,
     resp_code 			        VARCHAR(10) 		NULL COMMENT '回應代碼'     ,
     resp_msg 			        VARCHAR(2000) 		NULL COMMENT '回應訊息'     ,
+    twqr_resp_msg 			VARCHAR(2000) 		NULL COMMENT 'TWQR回應訊息'   ,
 
     pay_time                    DATETIME            NULL COMMENT '付款時間'                             ,
     pay_method                  INT(1)              NULL COMMENT '繳費方式  0:現金、1:刷卡、2:linepay、3:街口、4:悠遊卡、5:一卡通 6:匯款 7:ATM  8:其他多元支付TWpay 9:試營運',
+    pay_method01                INT(1)              NULL COMMENT '繳費方式  0:信用卡、1:金融卡'         ,
     pay_status                  VARCHAR(100)        NULL COMMENT '繳費狀態  0:待付款; 1:已付款; 2:失敗'   ,
     amount                      VARCHAR(15)         NULL COMMENT '應繳金額'                             ,
 
@@ -86,9 +88,11 @@ CREATE TABLE log_order (
     api_zhtw                    VARCHAR(500) 	    NULL COMMENT 'api名稱'	                        ,
     resp_code 			        VARCHAR(10) 		NULL COMMENT '回應代碼'     ,
     resp_msg 			        VARCHAR(2000) 		NULL COMMENT '回應訊息'     ,
+    twqr_resp_msg 			VARCHAR(2000) 		NULL COMMENT 'TWQR回應訊息'   ,
 
     pay_time                    DATETIME            NULL COMMENT '付款時間'                             ,
     pay_method                  INT(1)              NULL COMMENT '繳費方式  0:現金、1:刷卡、2:linepay、3:街口、4:悠遊卡、5:一卡通 6:匯款 7:ATM  8:其他多元支付TWpay 9:試營運',
+    pay_method01                INT(1)              NULL COMMENT '繳費方式  0:信用卡、1:金融卡'         ,
     pay_status                  VARCHAR(100)        NULL COMMENT '繳費狀態  0:待付款; 1:已付款; 2:失敗'   ,
     amount                      VARCHAR(15)         NULL COMMENT '金額'                                 ,
 

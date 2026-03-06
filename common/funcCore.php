@@ -1307,4 +1307,33 @@
 		// 4. SHA256
 		return hash('sha256', $base64 . $verifyCode);
 	}
+	function existTable($link, $table) {
+		global $g_db_name;
+
+		$ret = false;
+		$sql = "SELECT 1 FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '$g_db_name' AND TABLE_NAME = '$table'";
+		if ($result = mysqli_query($link, $sql)) {
+			if (mysqli_num_rows($result) > 0) {
+				// echo "Table '$table' exists.";
+				$ret = true;
+			} else {
+				// echo "Table '$table' does not exist.";
+				$ret = false;
+			}
+		}
+		return $ret;
+	}
+	function funMultiExecute($link, $sql)
+	{
+		$ret_msg = "";
+		if (mysqli_multi_query($link, $sql)) {
+			while(mysqli_more_results($link)) {
+				mysqli_next_result($link);
+			}
+		} else {
+			$ret_msg = "執行錯誤: ".mysqli_error($link);
+		}
+		return $ret_msg;
+		// return mysqli_affected_rows($link);
+	}
 ?>
