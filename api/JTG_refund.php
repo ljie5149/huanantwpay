@@ -62,6 +62,7 @@
 		$input_param['avalible'		] = "1";
 
 		$error = ""; $ret_msg = ""; $found_data = false;
+		$txnSeqno = "";
 		$db = new CXDB($remote_ip);
 		$conn_res = $db->connect($link, $member_id, "");
 		if ($conn_res["status"] == "true") {
@@ -74,10 +75,7 @@
 					$table = "data_order_$iyear";
 					
 					$sql = "SELECT * FROM $table WHERE 1=1";
-					if ($isOrderRefund == "Y")
-						$sql.= merge_sql_string_if_not_empty("order_no", $orderNo);
-					else
-						$sql.= merge_sql_string_if_not_empty("Reference_No", $refundOrderNo);
+					$sql.= merge_sql_string_if_not_empty("order_no", $orderNo);
 					// echo $sql."\n";
 					if ($result = mysqli_query($link, $sql)) {
 						if (mysqli_num_rows($result) > 0) {
@@ -92,7 +90,7 @@
 									$storeId 		= $row['storeId'	 ];
 									$endpointCode 	= $row['endpointCode'];
 								}
-								$txnSeqno 		= $row['Reference_No'];
+								$txnSeqno 		= isset($row['Reference_No']) ?? "";
 								$found_data = true;
 								$process_year = $iyear;
 								break;
@@ -131,7 +129,7 @@
 			}
 
 			$url = $g_3party_url."refund";
-			if ($isOrderRefund == "Y") {
+			if ($isOrderRefund == "Y") { // 使用我司交易單號退款
 				$requestData = [
 					'txnDir'          => $txnDir,
 					'storeId'         => $storeId,
@@ -145,7 +143,8 @@
 					// 'txnFISCTac'	  => $QRcode,
 					'isOrderRefund'	  => 'Y'
 				];
-			} else {
+			} else { // 使用銀行端交易單號退款
+				if (strlen($refundOrderNo) > 0 || strlen($txnSeqno) == 0) $txnSeqno = $refundOrderNo;
 				$requestData = [
 					'txnDir'          => $txnDir,
 					'storeId'         => $storeId,
@@ -155,7 +154,7 @@
 					'orgOrderNumber'  => $orderNo,
 					'orgCurrency'     => $txnCurrency,
 					'orgAmt'		  => $amount."00",
-					'txnSeqno'   	  => $refundOrderNo,
+					'txnSeqno'   	  => $txnSeqno,
 					// 'txnFISCTac'	  => $QRcode,
 					'isOrderRefund'	  => $isOrderRefund
 				];
