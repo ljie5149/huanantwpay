@@ -12,6 +12,7 @@
 	
 	global $g_start_year;
 	global $g_3party_url, $g_terminalNo;
+	global $g_txnCurrency, $g_channelCode;
 	$table = 'data_order';
 	$reuqire_fields 	= ['orderNo'];
 
@@ -146,14 +147,14 @@
 				$effect_row = $db->saveLog($link, $input_param, $ret_msg);
 			}
 		} else {
-			$res = result_message("false", "0x0205", "connect to mysql error :".$conn_res, $orders);
-			$input_param['remark'] = "異常"."connect to mysql error :".$conn_res;
+			$res = result_message("false", "0x0205", "connect to mysql error :".json_encode($conn_res), $orders);
+			$input_param['remark'] = "異常"."connect to mysql error :".json_encode($conn_res);
 			$effect_row = $db->saveLog($link, $input_param, $ret_msg);
 		}
 	} catch (Exception $e) {
 		$res = result_message("false", "0xE209", "Exception error! error detail:".$e->getMessage(), []);
-		JTG_wh_log_Exception($remote_ip, $func ." ".get_error_symbol($data["status_code"]).$data["status_code"]." ".$data["responseMessage"], $member_id);
-		$error_msg = "Exception error! error detail:".$func ." ".get_error_symbol($data["status_code"]).$data["status_code"]." ".$data["responseMessage"];
+		JTG_wh_log_Exception($remote_ip, $func ." ".get_error_symbol($res["status_code"]).$res["status_code"]." ".$res["responseMessage"], $member_id);
+		$error_msg = "Exception error! error detail:".$func ." ".get_error_symbol($res["status_code"]).$res["status_code"]." ".$res["responseMessage"];
 		$input_param['remark'] = $error_msg;
 		$effect_row = $db->saveLog($link, $input_param, $ret_msg);
 	} finally {

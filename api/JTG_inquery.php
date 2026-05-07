@@ -21,8 +21,11 @@
     $operateSrc		= isset($_POST['operateSrc'	]) ? $_POST['operateSrc'	] : ''	; // 車號或會員
     $txnDir			= isset($_POST['txnDir'  	]) ? $_POST['txnDir' 		] : 'RQ'; // 
     $orderNo		= isset($_POST['orderNo'  	]) ? $_POST['orderNo' 		] : '' 	; // 
-    $txnCurrency	= isset($_POST['txnCurrency']) ? $_POST['txnCurrency'	] : $g_txnCurrency; // 
-	
+    $txnCurrency	= isset($_POST['txnCurrency']) ? $_POST['txnCurrency'	] : $g_txnCurrency; //
+
+	$display_req_res = isset($_POST['display_req_res']) ? $_POST['display_req_res'] : '0';
+	$protect_by_jtg	 = isset($_POST['protect_by_jtg' ]) ? $_POST['protect_by_jtg' ] : '1';
+
     $require_param['orderNo'] = $orderNo;
 	
 
@@ -114,10 +117,11 @@
 							}
 						}
 					}
+					$modezhtw = getPaymodeZhtw($mode);
 					JTG_wh_log($remote_ip, "$func API Entry :mode = ($mode)$modezhtw, storeId = $storeId, endpointCode =$endpointCode", $member_id);
 				} catch (Exception $e) { }
 			}
-			if (!$found_data) {
+			if (!$found_data && $protect_by_jtg == "1") {
 				$res = result_message("false", "0x0204", "訂單 $orderNo 不存在，請確認是否使用TWQR繳費!", []);
 				JTG_wh_log($remote_ip, "$func search data return :".$res['responseMessage'], $member_id);
 				echo (json_encode($res, JSON_UNESCAPED_UNICODE));
@@ -143,12 +147,12 @@
 			$requestData['sign'] = generateSign($requestData, $g_verify_code);
 			$post_data = json_encode($requestData, JSON_UNESCAPED_UNICODE);
 			JTG_wh_log($remote_ip, "$func API Request :$post_data", $member_id);
-			if ($g_show_request) {
+			if ($display_req_res == "1") {
 				echo "Request\n".$post_data."\n"."RESPONSE\n";
 			}
 			
 			$result = callAPI($error, $url, $post_data, "POST", 30, false, getHuananHeader());
-			if ($g_show_request) {
+			if ($display_req_res == "1") {
 				echo "$result\n---------------------------------\n";
 			}
 			// ------------------------------------------------------------------------
@@ -268,7 +272,7 @@
 							$effect_row = $db->saveLog($link, $input_param, $ret_msg);
 						}
 					} else {
-						$res = result_message("true", "0x0200", "成功(未觸發停管)", $data);
+						$res = result_message("true", "0x0200", "成功(未觸發停管)", []);
 						$input_param['resp_msg'		] .= "，成功(未觸發停管)";
 						$effect_row = $db->saveLog($link, $input_param, $ret_msg);
 					}
@@ -287,11 +291,11 @@
 				$res = result_message("false", "0x020E", "API return :未知錯誤$respCode", $obj);
 			}
 		} else {
-			$res = result_message("false", "0x0205", "connect to mysql error :".$result, []);
+			$res = result_message("false", "0x0205", "connect to mysql error :".json_encode($conn_res), []);
 		}
 	} catch (Exception $e) {
 		$res = result_message("false", "0xE209", "Exception error! error detail:".$e->getMessage(), []);
-		JTG_wh_log_Exception($remote_ip, $func ." ".get_error_symbol($data["status_code"]).$data["status_code"]." ".$data["responseMessage"], $member_id);
+		JTG_wh_log_Exception($remote_ip, $func ." ".get_error_symbol($res["status_code"]).$res["status_code"]." ".$res["responseMessage"], $member_id);
 	} finally {
 		$data_close_conn = close_connection_finally($link, $remote_ip, $member_id);
 		if ($data_close_conn["status"] == "false") $data = $data_close_conn;

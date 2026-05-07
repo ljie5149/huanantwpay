@@ -1,5 +1,29 @@
 <?php
 /*
+	TWQR測試帳密
+	帳號：h123456
+	密碼：553388
+
+	金融卡註冊手機：0944999999
+	ID 	 :Y100054320
+	ACCT :000 202 000 223
+	PHONE:0944999999
+	BIRTH:061/05/15
+
+	信用卡註冊手機：0911333555
+	ID 	 :1629
+	卡號  :4595 8028 8000 8109
+	MM/YY :10/32
+	PHONE:0911333555
+	CCV:543
+
+	驗證碼 :123456
+	付款密碼：553388
+
+
+
+
+
 	1.1 測試環境連線參數 TEST
 		◼ 介接網址URL：https://qrtest.hncb.com.tw/eWalletWebapp/api/POSApp/{服務名稱} 
 		◼ VerifyCode：店家端POS系統身份驗證簽章驗MAC值，由銀行端提供會依各店家參數設
@@ -133,7 +157,7 @@
 	// 路徑
 	// -----------------------------------------------------------------------------------------------------------------
 	$g_root_url			 				= $g_proj_url.$g_proj_name."/"					;
-	$g_root_dir			 				= $_SERVER["DOCUMENT_ROOT"]."/".$g_proj_name.'/'	; // 網站根目錄	"/var/www/html/jtgOCPI/"
+	$g_root_dir			 				= ($g_is_remote) ? "/var/www/html/".$g_proj_name.'/' : $_SERVER["DOCUMENT_ROOT"]."/".$g_proj_name.'/'	; // 網站根目錄	"/var/www/html/jtgOCPI/"
 	$g_log_path		  	 				= $g_root_dir."log/"								; // log directory
 	$g_src_cell_plate_path				= "/var/www/html/parkingpostV2/api/"				; // 來源車輛圖片(佔位時使用)
 	$g_dst_cell_plate_path				= "/var/www/html/".$g_proj_name."/log/imgcell/"		; // 目的車輛圖片(佔位時使用)

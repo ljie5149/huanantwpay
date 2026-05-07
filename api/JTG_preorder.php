@@ -25,7 +25,7 @@
     $orderNo			= isset($_POST['orderNo'  			]) ? $_POST['orderNo' 	 		] : '' 				; // 
     $txnCurrency		= isset($_POST['txnCurrency'		]) ? $_POST['txnCurrency'		] : $g_txnCurrency	; // 
     $channelCode		= isset($_POST['channelCode'		]) ? $_POST['channelCode'		] : $g_channelCode	; // 
-    $expirySeconds		= isset($_POST['expirySeconds'		]) ? $_POST['expirySeconds'		] : "300"	; // 
+    $expirySeconds		= isset($_POST['expirySeconds'		]) ? $_POST['expirySeconds'		] : "300"	; //
 
     $payment_order_no	= isset($_POST['payment_order_no'  	]) ? $_POST['payment_order_no' 	] : '' 				; // 繳費機訂單號碼
     $pay_log			= isset($_POST['pay_log'  			]) ? $_POST['pay_log' 	 		] : 'TwPay主掃'	 	; // 支付log
@@ -44,6 +44,9 @@
     $loveId				= isset($_POST['loveId'  			]) ? $_POST['loveId' 	 		] : '' 				; // 愛心碼
     $parking_url		= isset($_POST['parking_url'		]) ? $_POST['parking_url'		] : '' 				; // 停管url(設定訂單狀態與開發票)
 	
+    $skip_mode			= isset($_POST['skip_mode'			]) ? $_POST['skip_mode'			] : '0'				; // 0:支援金融、信用卡; 1:僅支援金融卡; 2:僅支援信用卡; 3:都不支援
+    $display_req_res	= isset($_POST['display_req_res'	]) ? $_POST['display_req_res'	] : '0'				;
+
     $require_param['orderNo'			] = $orderNo;
     $require_param['amount' 			] = $amount;
     $require_param['payment_order_no' 	] = $payment_order_no;
@@ -133,32 +136,40 @@
 			$table = "data_order_$process_year";
 
 			$url = $g_3party_url."preOrder";
-			$requestData = [
-				'txnDir'          		=> $txnDir,
-				'channelCode'	  		=> $channelCode,
-				'storeId'         		=> $g_storeId4debitcard,
-				'endpointCode'    		=> $g_endpointCode4debitcard,
-				'creditStoreId'         => $g_storeId4credit,
-				'creditEndpointCode'    => $g_endpointCode4credit,
-				'terminalId'      		=> $g_terminalId,
-				'txnOrderNumber'  		=> $orderNo,
-				'txnAmt'          		=> $amount."00",
-				'txnCurrency'     		=> $txnCurrency,
-				'expiryDate'      		=> getDate4Nseconds(intval($expirySeconds), "", 'YmdHis')
-				// "noticeURL"   	  	=> "https://hcparking.jotangi.net/huanantwpay/api/JTG_notify.php"
-			];
+
+			// 先初始化一個空陣列
+			$requestData = [];
+
+			// 一個一個加入欄位
+			$requestData['txnDir'					]	= $txnDir;
+			$requestData['channelCode'				]	= $channelCode;
+			if ($skip_mode == "0" || $skip_mode == "1") {
+				$requestData['storeId'				]	= $g_storeId4debitcard;
+				$requestData['endpointCode'			]	= $g_endpointCode4debitcard;
+			}
+			if ($skip_mode == "0" || $skip_mode == "2") {
+				$requestData['creditStoreId'		]	= $g_storeId4credit;
+				$requestData['creditEndpointCode'	] 	= $g_endpointCode4credit;
+			}
+			$requestData['terminalId'				]	= $g_terminalId;
+			$requestData['txnOrderNumber'			]	= $orderNo;
+			$requestData['txnAmt'					]	= $amount . "00"; // 注意這裡做了字串拼接
+			$requestData['txnCurrency'				]	= $txnCurrency;
+
+			// 加入帶有函數運算的欄位
+			$requestData['expiryDate'				]	= getDate4Nseconds(intval($expirySeconds), "", 'YmdHis');
 
 			// 產生 sign
 			// echo generateSign($requestData, $g_verify_code)."\n";
 			$requestData['sign'] = generateSign($requestData, $g_verify_code);
 			$post_data = json_encode($requestData, JSON_UNESCAPED_UNICODE);
 			JTG_wh_log($remote_ip, "$func API Request :$post_data", $member_id);
-			if ($g_show_request) {
+			if ($display_req_res == "1") {
 				echo "Request\n".$post_data."\n"."RESPONSE\n";
 			}
 
 			$result = callAPI($error, $url, $post_data, "POST", 30, false, getHuananHeader());
-			if ($g_show_request) {
+			if ($display_req_res == "1") {
 				echo "$result\n---------------------------------\n";
 			}
 			
@@ -259,11 +270,11 @@
 				$res = result_message("false", "0x020E", "API return :未知錯誤$respCode", $obj);
 			}
 		} else {
-			$res = result_message("false", "0x0205", "connect to mysql error :".$result, []);
+			$res = result_message("false", "0x0205", "connect to mysql error :".json_encode($conn_res), []);
 		}
 	} catch (Exception $e) {
 		$res = result_message("false", "0xE209", "Exception error! error detail:".$e->getMessage(), []);
-		JTG_wh_log_Exception($remote_ip, $func ." ".get_error_symbol($data["status_code"]).$data["status_code"]." ".$data["responseMessage"], $member_id);
+		JTG_wh_log_Exception($remote_ip, $func ." ".get_error_symbol($res["status_code"]).$res["status_code"]." ".$res["responseMessage"], $member_id);
 	} finally {
 		$data_close_conn = close_connection_finally($link, $remote_ip, $member_id);
 		if ($data_close_conn["status"] == "false") $data = $data_close_conn;

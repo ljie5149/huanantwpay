@@ -17,6 +17,7 @@
     header('Content-Type: application/json');
     // 假設前端送 JSON 格式
     $json = file_get_contents("php://input");
+	JTG_wh_log("notify","---------------------------------", "", "JTG_notify");
 	JTG_wh_log("notify", "json :$json", "", "JTG_notify");
 
     // // 看門狗
@@ -69,10 +70,8 @@
 		$member_id 	= "JTG_TWPAY";
 		
 		$obj 		= json_decode($json, true);
-		if ($g_show_request) {
-			echo "$json\n---------------------------------\n";
-		}
 
+		$remote_ip = get_remote_ip();
 		$pay_method01 = 0;
 		$db = new CXDB($remote_ip);
 		$conn_res = $db->connect($link, $member_id, "");
@@ -156,6 +155,7 @@
 							}
 						}
 					}
+					$modezhtw = getPaymodeZhtw($mode);
 					JTG_wh_log($remote_ip, "$func API Entry :mode = ($mode)$modezhtw, storeId = $storeId, endpointCode =$endpointCode", $member_id);
 				} catch (Exception $e) { }
 			}
@@ -205,7 +205,7 @@
 								$input_param['set_pay_status'] = "1";
 								if ($g_getinvoice_notify) {
 									$req_invoicejson = "";
-									$GetInvoice_json 	= getInvoice($req_invoicejson, $url, $parking_id, $orderNo, $operate_src, $amount, $carrierId1, $carrierId2, $email, $carrierType, $loveId);
+									$GetInvoice_json 	= getInvoice($req_invoicejson, $parking_url, $parking_id, $orderNo, $operate_src, $amount, $carrierId1, $carrierId2, $email, $carrierType, $loveId);
 									$obj4GetInvoice		= json_decode($SetPayStatus_json, true);
 									JTG_wh_log($remote_ip, "$func - [getInvoice] API return :$GetInvoice_json", $member_id);
 									$input_param['api_zhtw'		] = $api_name."[取得發票]";
@@ -244,7 +244,7 @@
 							$effect_row = $db->saveLog($link, $input_param, $ret_msg);
 						}
 					} else {
-						$res = result_message("true", "0x0200", "成功(未觸發停管)", $data);
+						$res = result_message("true", "0x0200", "成功(未觸發停管)", []);
 						$input_param['resp_msg'		] .= "，成功(未觸發停管)";
 						$effect_row = $db->saveLog($link, $input_param, $ret_msg);
 					}
@@ -263,11 +263,11 @@
 				$res = result_message("false", "0x020E", "API return :未知錯誤$respCode", $obj);
 			}
 		} else {
-			$res = result_message("false", "0x0205", "connect to mysql error :".$result, []);
+			$res = result_message("false", "0x0205", "connect to mysql error :".json_encode($conn_res), []);
 		}
 	} catch (Exception $e) {
 		$res = result_message("false", "0xE209", "Exception error! error detail:".$e->getMessage(), []);
-		JTG_wh_log_Exception($remote_ip, $func ." ".get_error_symbol($data["status_code"]).$data["status_code"]." ".$data["responseMessage"], $member_id);
+		JTG_wh_log_Exception($remote_ip, $func ." ".get_error_symbol($res["status_code"]).$res["status_code"]." ".$res["responseMessage"], $member_id);
 	} finally {
 		$data_close_conn = close_connection_finally($link, $remote_ip, $member_id);
 		if ($data_close_conn["status"] == "false") $data = $data_close_conn;

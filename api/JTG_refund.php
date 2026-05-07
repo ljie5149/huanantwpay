@@ -25,8 +25,11 @@
     $txnCurrency	= isset($_POST['txnCurrency'  	]) ? $_POST['txnCurrency' 	] : $g_txnCurrency; // 
     $QRcode			= isset($_POST['QRcode'			]) ? $_POST['QRcode' 	 	] : ''	; //  
     $bankNo			= isset($_POST['bankNo'			]) ? $_POST['bankNo' 	 	] : ''	; // 
-    $isOrderRefund	= isset($_POST['isOrderRefund'	]) ? $_POST['isOrderRefund'	] : 'Y'	; // 
-	
+    $isOrderRefund	= isset($_POST['isOrderRefund'	]) ? $_POST['isOrderRefund'	] : 'Y'	; // Y:原單號; N:銀行端單號
+
+	$display_req_res	= isset($_POST['display_req_res']) ? $_POST['display_req_res'] : '0';
+	$protect_by_jtg	 	= isset($_POST['protect_by_jtg' ]) ? $_POST['protect_by_jtg' ] : '1';
+
     $require_param['orderNo'] = $orderNo;
 	
 	$api 		= $func 	= "JTG_refund";
@@ -71,7 +74,10 @@
 					$table = "data_order_$iyear";
 					
 					$sql = "SELECT * FROM $table WHERE 1=1";
-					$sql.= merge_sql_string_if_not_empty("order_no", $orderNo);
+					if ($isOrderRefund == "Y")
+						$sql.= merge_sql_string_if_not_empty("order_no", $orderNo);
+					else
+						$sql.= merge_sql_string_if_not_empty("Reference_No", $refundOrderNo);
 					// echo $sql."\n";
 					if ($result = mysqli_query($link, $sql)) {
 						if (mysqli_num_rows($result) > 0) {
@@ -96,7 +102,7 @@
 				}
 				JTG_wh_log($remote_ip, "$func API Entry : storeId = $storeId, endpointCode =$endpointCode", $member_id);
             } catch (Exception $e) { }
-			if (!$found_data) {
+			if (!$found_data && $protect_by_jtg == "1" && $isOrderRefund == "Y") {
 				$res = result_message("false", "0x0204", "訂單 $orderNo 不存在，無法進行退款作業!", []);
 				JTG_wh_log($remote_ip, "$func search data return :".$res['responseMessage'], $member_id);
 				echo (json_encode($res, JSON_UNESCAPED_UNICODE));
@@ -149,7 +155,7 @@
 					'orgOrderNumber'  => $orderNo,
 					'orgCurrency'     => $txnCurrency,
 					'orgAmt'		  => $amount."00",
-					'txnSeqno'   	  => $txnSeqno,
+					'txnSeqno'   	  => $refundOrderNo,
 					// 'txnFISCTac'	  => $QRcode,
 					'isOrderRefund'	  => $isOrderRefund
 				];
@@ -159,12 +165,12 @@
 			$requestData['sign'] = generateSign($requestData, $g_verify_code);
 			$post_data = json_encode($requestData, JSON_UNESCAPED_UNICODE);
 			JTG_wh_log($remote_ip, "$func API Request :$post_data", $member_id);
-			if ($g_show_request) {
+			if ($display_req_res == "1") {
 				echo "Request\n".$post_data."\n"."RESPONSE\n";
 			}
 			
 			$result = callAPI($error, $url, $post_data, "POST", 25, false, getHuananHeader());
-			if ($g_show_request) {
+			if ($display_req_res == "1") {
 				echo "$result\n---------------------------------\n";
 			}
 
@@ -231,11 +237,11 @@
 				$res = result_message("false", "0x020E", "API return :未知錯誤$respCode", $obj);
 			}
 		} else {
-			$res = result_message("false", "0x0205", "connect to mysql error :".$result, []);
+			$res = result_message("false", "0x0205", "connect to mysql error :".json_encode($conn_res), []);
 		}
 	} catch (Exception $e) {
 		$res = result_message("false", "0xE209", "Exception error! error detail:".$e->getMessage(), []);
-		JTG_wh_log_Exception($remote_ip, $func ." ".get_error_symbol($data["status_code"]).$data["status_code"]." ".$data["responseMessage"], $member_id);
+		JTG_wh_log_Exception($remote_ip, $func ." ".get_error_symbol($res["status_code"]).$res["status_code"]." ".$res["responseMessage"], $member_id);
 	} finally {
 		$data_close_conn = close_connection_finally($link, $remote_ip, $member_id);
 		if ($data_close_conn["status"] == "false") $data = $data_close_conn;
